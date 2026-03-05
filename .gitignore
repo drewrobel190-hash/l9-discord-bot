@@ -1,2 +1,3 @@
 node_modules
 .env
+*l9-boss-tracker-firebase-adminsdk-*.json

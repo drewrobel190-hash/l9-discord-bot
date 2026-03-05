@@ -17,22 +17,33 @@ client.once("clientReady", () => {
 client.login(process.env.DISCORD_TOKEN);
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: "https://drewrobel190-hash.github.io"
+}));
 app.use(express.json());
 
 app.post("/alert", async (req, res) => {
   try {
-    const message = req.body.message;
-
-    const channel = await client.channels.fetch(CHANNEL_ID);
-
-    if (channel) {
-      await channel.send(message);
-      console.log("📨 Sent:", message);
+    // ✅ simple auth
+    const secret = req.headers["x-alert-secret"];
+    if (secret !== process.env.ALERT_SECRET) {
+      return res.sendStatus(401);
     }
 
-    res.sendStatus(200);
+    const message = req.body?.message;
+    if (!message || typeof message !== "string") {
+      return res.sendStatus(400);
+    }
 
+    const channel = await client.channels.fetch(CHANNEL_ID);
+    if (!channel) return res.sendStatus(404);
+
+    await channel.send({
+  content: message,
+  allowedMentions: { roles: ["1463810381456609360"] } // allow ONLY this role
+    });
+
+    res.sendStatus(200);
   } catch (err) {
     console.error("❌ Alert error:", err);
     res.sendStatus(500);

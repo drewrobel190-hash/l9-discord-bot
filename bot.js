@@ -10,7 +10,7 @@ const client = new Client({
 
 const CHANNEL_ID = process.env.CHANNEL_ID;
 
-client.once("clientReady", () => {
+client.once("ready", () => {
   console.log(`✅ Bot online as ${client.user.tag}`);
 });
 
@@ -40,8 +40,11 @@ app.post("/alert", async (req, res) => {
 
     await channel.send({
   content: message,
-  allowedMentions: { roles: ["1463810381456609360"] } // allow ONLY this role
-    });
+  allowedMentions: {
+    parse: [], // don't allow random mentions
+    roles: ["1463810381456609360"] // allow only this role
+  }
+});
 
     res.sendStatus(200);
   } catch (err) {

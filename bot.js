@@ -30,7 +30,15 @@ const admin = require("firebase-admin");
 let db = null;
 
 try {
- const serviceAccount = require("./l9-boss-tracker-firebase-adminsdk-fbsvc-1d1ad6abf2.json"); // use your exact filename
+  let serviceAccount;
+
+  if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+    // Railway / production
+    serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+  } else {
+    // Local PC
+    serviceAccount = require("./l9-boss-tracker-firebase-adminsdk-fbsvc-1d1ad6abf2.json");
+  }
 
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
@@ -39,9 +47,8 @@ try {
 
   db = admin.database();
   console.log("✅ Firebase admin ready");
-
 } catch (err) {
-  console.log("⚠️ Firebase not configured locally.");
+  console.error("⚠️ Firebase not configured:", err.message);
 }
 
 function msToHuman(ms) {

@@ -58,6 +58,30 @@ function msToHuman(ms) {
   const s = total % 60;
   return `${h}h ${m}m ${s}s`;
 }
+function getNextFixedSpawn(schedule) {
+  const now = new Date();
+  let soonest = null;
+
+  for (const s of schedule) {
+    const [hour, minute] = s.time.split(":").map(Number);
+
+    const target = new Date(now);
+    target.setHours(hour, minute, 0, 0);
+
+    const dayDiff = (s.day - target.getDay() + 7) % 7;
+    target.setDate(target.getDate() + dayDiff);
+
+    if (target <= now) {
+      target.setDate(target.getDate() + 7);
+    }
+
+    if (!soonest || target < soonest) {
+      soonest = target;
+    }
+  }
+
+  return soonest;
+}
 // ===== COOLDOWN (anti-spam) =====
 // Ctrl+F: COOLDOWN_MS
 
@@ -71,6 +95,30 @@ const KNOWN_BOSSES = [
   "Lady Dalia",
   "General Aquleus",
   // add more whenever you want
+];
+// ===== FIXED BOSSES FROM WEBSITE =====
+const FIXED_BOSSES = [
+{ name:"Clemantis", schedule:[{day:1,time:"11:30"},{day:4,time:"19:00"}], disabled:true },
+{ name:"Saphirus", schedule:[{day:0,time:"17:00"},{day:2,time:"11:30"}], disabled:true },
+{ name:"Neutro", schedule:[{day:2,time:"19:00"},{day:4,time:"11:30"}], disabled:true },
+{ name:"Thymele", schedule:[{day:1,time:"19:00"},{day:3,time:"11:30"}], disabled:true },
+
+{ name:"Milavy", schedule:[{day:6,time:"15:00"}] },
+{ name:"Ringor", schedule:[{day:6,time:"17:00"}] },
+{ name:"Roderick", schedule:[{day:5,time:"19:00"}] },
+{ name:"Auraq", schedule:[{day:5,time:"22:00"},{day:3,time:"21:00"}] },
+{ name:"Chaiflock", schedule:[{day:6,time:"22:00"}] },
+{ name:"Benji", schedule:[{day:0,time:"21:00"}] },
+
+{ name:"Libitina", schedule:[{day:1,time:"21:00"},{day:6,time:"21:00"}] },
+
+{ name:"Rakajeth", schedule:[{day:2,time:"22:00"},{day:0,time:"19:00"}] },
+
+{ name:"Icaruthia", schedule:[{day:2,time:"21:00"},{day:5,time:"21:00"}], disabled:true },
+{ name:"Motti", schedule:[{day:3,time:"19:00"},{day:6,time:"19:00"}], disabled:true },
+{ name:"Nevaeh", schedule:[{day:0,time:"22:00"}], disabled:true },
+
+{ name:"Tumier", schedule:[{day:0,time:"19:00"}] }
 ];
 const COOLDOWN_MS = 60_000;
 
@@ -148,19 +196,50 @@ userCooldowns.set(cooldownKey, nowTs);
   if (!db) return sendTemp(msg.channel,"⚠️ Firebase not configured on the bot.");
 
   try {
-    const snap = await db.ref("bossTimers").get();
-    const timers = snap.val() || {};
+const snap = await db.ref("bossTimers").get();
+const timers = snap.val() || {};
+
+const fixedSnap = await db.ref("fixedBossGuilds").get();
+const fixedGuilds = fixedSnap.val() || {};
 
     const now = Date.now();
 
     // Helper: normalize boss data -> spawnMs
-    const entries = Object.entries(timers)
-      .map(([name, data]) => {
-        const spawnMs = typeof data === "object" ? data.spawn : data;
-        return { name, spawnMs };
-      })
-      .filter(x => x.spawnMs && x.spawnMs >= now)
-      .sort((a, b) => a.spawnMs - b.spawnMs);
+    // interval bosses from Firebase
+const intervalEntries = Object.entries(timers)
+  .map(([name, data]) => {
+    const spawnMs = typeof data === "object" ? data.spawn : data;
+    return { name, spawnMs, type: "interval" };
+  })
+  .filter(x => x.spawnMs && x.spawnMs >= now);
+
+// fixed bosses from schedule (skip disabled)
+const fixedEntries = FIXED_BOSSES
+  .filter(b => {
+    const entry = fixedGuilds[b.name];
+
+    // website/firebase disabled check
+    if (entry === "Disabled") return false;
+    if (entry && typeof entry === "object" && entry.disabled === true) return false;
+
+    // local hardcoded fallback
+    if (b.disabled) return false;
+
+    return true;
+  })
+  .map(b => {
+    const nextSpawn = getNextFixedSpawn(b.schedule);
+    return {
+      name: b.name,
+      spawnMs: nextSpawn ? nextSpawn.getTime() : null,
+      type: "fixed"
+    };
+  })
+  .filter(x => x.spawnMs && x.spawnMs >= now);
+
+// merge both
+const entries = [...intervalEntries, ...fixedEntries]
+  .sort((a, b) => a.spawnMs - b.spawnMs);
 
     // !next
     if (cmd === "next") {

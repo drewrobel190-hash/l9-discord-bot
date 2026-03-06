@@ -3,6 +3,11 @@ require("dotenv").config();
 const { Client, GatewayIntentBits } = require("discord.js");
 const express = require("express");
 const cors = require("cors");
+// ===== OPENAI (AI MODE) =====
+// Ctrl+F: OPENAI
+const OpenAI = require("openai");
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4.1-mini";
 
 const client = new Client({
   intents: [
@@ -71,6 +76,7 @@ const COOLDOWN_RULES = {
   next: 20_000,
   boss: 15_000,
   list: 60_000,
+  ask: 10_000
 };
 
 // Ctrl+F: userCooldowns
@@ -102,7 +108,7 @@ client.on("messageCreate", async (msg) => {
 
   // Commands we support
   // auto-delete the user's command message after 60s
-const isBossCommand = ["next", "boss", "list"].includes(cmd);
+const isBossCommand = ["next", "boss", "list", "ask"].includes(cmd);
 if (!isBossCommand) return;
 
 // auto-delete the user's command message after 60s
@@ -169,7 +175,69 @@ userCooldowns.set(cooldownKey, nowTs);
 
       return sendTemp(msg.channel,`📌 **Next bosses:**\n${lines.join("\n")}`);
     }
+// !ask <question>
+// Ctrl+F: ASK_COMMAND
+if (cmd === "ask") {
+  if (!arg) return sendTemp(msg.channel, "Usage: `!ask <question>`");
 
+  // cheap shortcut (so AI doesn't get called for obvious requests)
+  const lower = arg.toLowerCase();
+  // simple greetings (no AI call)
+const greetings = ["hi","hello","hey","yo","sup","hola","goodmorning","good evening"];
+
+// greeting only if the message is short
+if (greetings.includes(lower) || greetings.includes(lower.replace(" bot",""))) {
+  return sendTemp(
+    msg.channel,
+    `👋 Hello ${msg.author.username}! You can ask me about our **L9 boss timers**.`
+  );
+}
+  if (lower.includes("next") || lower.includes("spawns next")) {
+    const soonest = entries[0];
+    if (!soonest) return sendTemp(msg.channel, "No upcoming bosses.");
+    const remaining = soonest.spawnMs - now;
+    return sendTemp(msg.channel, `⚔️ **${soonest.name}** will spawn in **${msToHuman(remaining)}**`);
+  }
+  if (lower.startsWith("list") || lower.includes("show list")) {
+    if (entries.length === 0) return sendTemp(msg.channel, "No upcoming bosses.");
+    const top = entries.slice(0, 5);
+    const lines = top.map((b, i) => `${i + 1}. ⚔️ **${b.name}** — **${msToHuman(b.spawnMs - now)}**`);
+    return sendTemp(msg.channel, `📌 **Next bosses:**\n${lines.join("\n")}`);
+  }
+
+  // Build small context for AI (keep it short)
+  const top = entries.slice(0, 10).map(b => ({
+    name: b.name,
+    minutes: Math.round((b.spawnMs - now) / 60000),
+  }));
+
+  try {
+    const resp = await openai.responses.create({
+      model: OPENAI_MODEL,
+      input: [
+        {
+          role: "system",
+          content:
+            "You are a Discord bot for an MMORPG boss tracker. Be short. " +
+            "If user asks about timers, use the provided data. If unknown, say you don't know.",
+        },
+        {
+          role: "user",
+          content: `Upcoming bosses (minutes from now): ${JSON.stringify(top)}\n\nUser: ${arg}`,
+        },
+      ],
+    });
+
+    const text = (resp.output_text || "").trim() || "I couldn't generate a reply.";
+    return sendTemp(msg.channel, text);
+  } catch (e) {
+    console.error("❌ !ask AI error:", e);
+    return sendTemp(
+  msg.channel,
+  "🤖 AI is temporarily unavailable. Try `!next`, `!list`, or `!boss <name>`."
+);
+  }
+}
     // !boss <name>
     if (cmd === "boss") {
       if (!arg) return sendTemp(msg.channel,"Usage: `!boss <name>`");

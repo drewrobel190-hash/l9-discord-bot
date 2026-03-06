@@ -60,23 +60,31 @@ function msToHuman(ms) {
 }
 function getNextFixedSpawn(schedule) {
   const now = new Date();
+
+  // convert "now" into Philippines time by shifting +8h from UTC
+  const nowPH = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+
   let soonest = null;
 
   for (const s of schedule) {
     const [hour, minute] = s.time.split(":").map(Number);
 
-    const target = new Date(now);
-    target.setHours(hour, minute, 0, 0);
+    // build target in PH time first
+    const targetPH = new Date(nowPH);
+    targetPH.setUTCHours(hour, minute, 0, 0);
 
-    const dayDiff = (s.day - target.getDay() + 7) % 7;
-    target.setDate(target.getDate() + dayDiff);
+    const dayDiff = (s.day - targetPH.getUTCDay() + 7) % 7;
+    targetPH.setUTCDate(targetPH.getUTCDate() + dayDiff);
 
-    if (target <= now) {
-      target.setDate(target.getDate() + 7);
+    if (targetPH <= nowPH) {
+      targetPH.setUTCDate(targetPH.getUTCDate() + 7);
     }
 
-    if (!soonest || target < soonest) {
-      soonest = target;
+    // convert back to real UTC timestamp
+    const targetUTC = new Date(targetPH.getTime() - 8 * 60 * 60 * 1000);
+
+    if (!soonest || targetUTC < soonest) {
+      soonest = targetUTC;
     }
   }
 

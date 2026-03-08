@@ -451,11 +451,10 @@ if (greetings.includes(lower) || greetings.includes(lower.replace(" bot",""))) {
 const text =
   resp.choices?.[0]?.message?.content?.trim() ||
   "I couldn't generate a reply.";
-    return sendTemp(msg.channel, text);
+    return msg.channel.send (text);
   } catch (e) {
     console.error("❌ !ask AI error:", e);
-    return sendTemp(
-  msg.channel,
+    return msg.channel.send(
   "🤖 AI is temporarily unavailable. Try `!next`, `!list`, or `!boss <name>`."
 );
   }

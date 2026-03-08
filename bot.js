@@ -295,8 +295,8 @@ client.on("messageCreate", async (msg) => {
 
   // Commands we support
   // auto-delete the user's command message after 60s
-const isBossCommand = ["next", "boss", "list"].includes(cmd);
-if (!isBossCommand) return;
+const supportedCommands = ["next", "boss", "list", "ask"].includes(cmd);
+if (!supportedCommands) return;
 
 // auto-delete the user's command message after 60s
 if (cmd !== "ask") {

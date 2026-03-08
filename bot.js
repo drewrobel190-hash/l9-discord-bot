@@ -295,11 +295,13 @@ client.on("messageCreate", async (msg) => {
 
   // Commands we support
   // auto-delete the user's command message after 60s
-const isBossCommand = ["next", "boss", "list", "ask"].includes(cmd);
+const isBossCommand = ["next", "boss", "list"].includes(cmd);
 if (!isBossCommand) return;
 
 // auto-delete the user's command message after 60s
-setTimeout(() => msg.delete().catch(() => {}), AUTO_DELETE_MS);
+if (cmd !== "ask") {
+  setTimeout(() => msg.delete().catch(() => {}), AUTO_DELETE_MS);
+}
 
   // Cooldown (per user)
   // Cooldown (per user per command)

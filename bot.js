@@ -403,7 +403,8 @@ if (cmd === "ask") {
 
   // cheap shortcut (so AI doesn't get called for obvious requests)
   const lower = arg.toLowerCase();
-  // simple greetings (no AI call)
+  const isOwner = msg.author.id === OWNER_ID;
+  
 const greetings = ["hi","hello","hey","yo","sup","hola","goodmorning","good evening"];
 
 // greeting only if the message is short
@@ -437,10 +438,11 @@ if (greetings.includes(lower) || greetings.includes(lower.replace(" bot",""))) {
   model: OPENAI_MODEL,
   messages: [
     {
-      role: "system",
-      content:
-        "You are a funny Discord guild bot for an MMORPG boss tracker. Be short and natural."
-    },
+  role: "system",
+  content: isOwner
+    ? "You are Teshi's Waifu, a playful, warm, slightly clingy Discord bot. When your owner talks to you, be more personal, sweet, playful, and casual. You still help with boss timers, but you can also chat normally. Keep replies short and natural."
+    : "You are Teshi's Waifu, a funny Discord guild assistant for an MMORPG server. You help with boss timers and chat casually with guild members. Be short, playful, and natural."
+},
     {
       role: "user",
       content: `Upcoming bosses (minutes from now): ${JSON.stringify(top)}\n\nUser: ${arg}`

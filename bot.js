@@ -1,26 +1,80 @@
 require("dotenv").config();
 
-const { Client, GatewayIntentBits } = require("discord.js");
+const {
+  Client,
+  GatewayIntentBits,
+  SlashCommandBuilder,
+  REST,
+  Routes,
+  MessageFlags
+} = require("discord.js");
 const express = require("express");
 const cors = require("cors");
 // ===== OPENAI (AI MODE) =====
-// Ctrl+F: OPENAI
+// ===== GROQ AI =====
+// Ctrl+F: GROQ
 const OpenAI = require("openai");
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4.1-mini";
+
+const openai = new OpenAI({
+  apiKey: process.env.GROQ_API_KEY,
+  baseURL: "https://api.groq.com/openai/v1"
+});
+
+const OPENAI_MODEL = "llama-3.3-70b-versatile";
 
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent // ✅ needed for prefix commands and reading chat
+    GatewayIntentBits.MessageContent
   ]
 });
 
 const CHANNEL_ID = process.env.CHANNEL_ID;
+const OWNER_ID = "709437629199941685";
+const CLIENT_ID = process.env.CLIENT_ID; 
+const GUILD_IDS = (process.env.GUILD_IDS || process.env.GUILD_ID || "")
+  .split(",")
+  .map(id => id.trim())
+  .filter(Boolean);
 
-client.once("ready", () => {
-  console.log(`✅ Bot online as ${client.user.tag}`);
+const slashCommands = [
+  new SlashCommandBuilder()
+    .setName("speak")
+    .setDescription("Make the bot speak publicly")
+    .addStringOption(option =>
+      option
+        .setName("text")
+        .setDescription("What the bot should say")
+        .setRequired(true)
+    )
+    .addStringOption(option =>
+      option
+        .setName("replyto")
+        .setDescription("Message ID to reply to")
+        .setRequired(false)
+    )
+    .toJSON()
+];
+
+client.once("clientReady", async () => {
+  console.log(`✅ Bot online as ${client.user.tag} | PID: ${process.pid}`);
+
+  try {
+    const rest = new REST({ version: "10" }).setToken(process.env.DISCORD_TOKEN);
+
+    for (const guildId of GUILD_IDS) {
+      await rest.put(
+        Routes.applicationGuildCommands(CLIENT_ID, guildId.trim()),
+        { body: slashCommands }
+      );
+
+      console.log(`✅ Slash commands registered in guild ${guildId}`);
+    }
+
+  } catch (err) {
+    console.error("❌ Failed to register slash commands:", err);
+  }
 });
 
 client.login(process.env.DISCORD_TOKEN);
@@ -159,6 +213,76 @@ async function sendTemp(channel, text) {
   return m;
 }
 
+client.on("messageCreate", async (message) => {
+  if (message.author.bot) return;
+
+  const prefix = "!";
+  if (!message.content.startsWith(prefix)) return;
+
+  const args = message.content.slice(prefix.length).trim().split(/ +/);
+  const command = args.shift()?.toLowerCase();
+
+  // !say hello guys
+  if (command === "say") {
+    if (message.author.id !== OWNER_ID) {
+      return message.reply("nope only my owner can use this command 😎");
+    }
+
+    const text = args.join(" ").trim();
+    if (!text) {
+      return message.reply("type something like `!say hello guild`");
+    }
+
+    // Optional: delete your command message so only bot message stays
+    try {
+      await message.delete();
+    } catch (err) {
+      console.log("Could not delete command message:", err.message);
+    }
+
+    await message.channel.send(text);
+  }
+});
+
+
+
+client.on("interactionCreate", async (interaction) => {
+  if (!interaction.isChatInputCommand()) return;
+
+  if (interaction.commandName === "speak") {
+    if (interaction.user.id !== OWNER_ID) {
+      return interaction.reply({
+        content: "only my owner can use this 😎",
+        flags: MessageFlags.Ephemeral
+      });
+    }
+
+    const text = interaction.options.getString("text", true);
+    const replyTo = interaction.options.getString("replyto");
+
+    await interaction.reply({
+      content: "sent 👌",
+      flags: MessageFlags.Ephemeral
+    });
+
+    if (replyTo) {
+      try {
+        const msg = await interaction.channel.messages.fetch(replyTo);
+
+        await msg.reply({
+          content: text,
+          allowedMentions: { repliedUser: false }
+        });
+      } catch (err) {
+        console.log("Could not reply to target message:", err.message);
+        await interaction.channel.send(text);
+      }
+    } else {
+      await interaction.channel.send(text);
+    }
+  }
+});
+
 client.on("messageCreate", async (msg) => {
   if (msg.author.bot) return;
 
@@ -272,6 +396,7 @@ const entries = [...intervalEntries, ...fixedEntries]
 // !ask <question>
 // Ctrl+F: ASK_COMMAND
 if (cmd === "ask") {
+  console.log(`!ask used by ${msg.author.tag} | arg: ${arg} | PID: ${process.pid}`);
   if (!arg) return sendTemp(msg.channel, "Usage: `!ask <question>`");
 
   // cheap shortcut (so AI doesn't get called for obvious requests)
@@ -306,23 +431,24 @@ if (greetings.includes(lower) || greetings.includes(lower.replace(" bot",""))) {
   }));
 
   try {
-    const resp = await openai.responses.create({
-      model: OPENAI_MODEL,
-      input: [
-        {
-          role: "system",
-          content:
-            "You are a Discord bot for an MMORPG boss tracker. Be short. " +
-            "If user asks about timers, use the provided data. If unknown, say you don't know.",
-        },
-        {
-          role: "user",
-          content: `Upcoming bosses (minutes from now): ${JSON.stringify(top)}\n\nUser: ${arg}`,
-        },
-      ],
-    });
+   const resp = await openai.chat.completions.create({
+  model: OPENAI_MODEL,
+  messages: [
+    {
+      role: "system",
+      content:
+        "You are a funny Discord guild bot for an MMORPG boss tracker. Be short and natural."
+    },
+    {
+      role: "user",
+      content: `Upcoming bosses (minutes from now): ${JSON.stringify(top)}\n\nUser: ${arg}`
+    }
+  ]
+});
 
-    const text = (resp.output_text || "").trim() || "I couldn't generate a reply.";
+const text =
+  resp.choices?.[0]?.message?.content?.trim() ||
+  "I couldn't generate a reply.";
     return sendTemp(msg.channel, text);
   } catch (e) {
     console.error("❌ !ask AI error:", e);

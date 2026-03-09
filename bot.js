@@ -213,6 +213,14 @@ async function sendTemp(channel, text) {
   setTimeout(() => m.delete().catch(() => {}), AUTO_DELETE_MS);
   return m;
 }
+async function reactRandom(message, emojis) {
+  try {
+    const emoji = emojis[Math.floor(Math.random() * emojis.length)];
+    await message.react(emoji);
+  } catch (err) {
+    console.log("Could not react:", err.message);
+  }
+}
 
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
@@ -287,7 +295,12 @@ client.on("interactionCreate", async (interaction) => {
 // Ctrl+F: MENTION_CHAT
 
 // ===== RANDOM GREETINGS =====
-// Ctrl+F: RANDOM_GREETINGS
+// ===== RANDOM REACTIONS =====
+// Ctrl+F: RANDOM_REACTIONS
+
+const OWNER_REACTIONS = ["⚡", "😏", "👀", "💜"];
+const LEADER_REACTIONS = ["⚡", "👌", "👀"];
+const MEMBER_REACTIONS = ["⚡", "🙂", "👀"];
 
 const OWNER_GREETINGS = [
   "Yes Senpai~?",
@@ -322,6 +335,8 @@ client.on("messageCreate", async (message) => {
 
   // detect if the bot was mentioned
   const mentioned = message.mentions.users.has(client.user.id);
+  // detect name usage
+const nameUsed = /\braiden\s*mei\b|\braiden\b|\bmei\b/i.test(message.content);
 
   // detect if user replied to the bot
   let repliedToBot = false;
@@ -336,7 +351,7 @@ client.on("messageCreate", async (message) => {
   }
 
   // stop if not mention and not reply-to-bot
-  if (!mentioned && !repliedToBot) return;
+  if (!mentioned && !repliedToBot && !nameUsed) return;
 
   const isOwner = message.author.id === OWNER_ID;
   const isGuildLeader = message.author.id === GUILD_LEADER_ID;
@@ -359,26 +374,41 @@ client.on("messageCreate", async (message) => {
 if (!text) {
 
   if (isOwner) {
-    const reply = OWNER_GREETINGS[Math.floor(Math.random() * OWNER_GREETINGS.length)];
-    return message.reply({
-      content: reply,
-      allowedMentions: { repliedUser: false }
-    });
-  }
+  const onlyReact = Math.random() < 0.1; 
+  await reactRandom(message, OWNER_REACTIONS);
 
-  if (isGuildLeader) {
-    const reply = LEADER_GREETINGS[Math.floor(Math.random() * LEADER_GREETINGS.length)];
-    return message.reply({
-      content: reply,
-      allowedMentions: { repliedUser: false }
-    });
-  }
+  if (onlyReact) return;
 
-  const reply = MEMBER_GREETINGS[Math.floor(Math.random() * MEMBER_GREETINGS.length)];
+  const reply = OWNER_GREETINGS[Math.floor(Math.random() * OWNER_GREETINGS.length)];
   return message.reply({
     content: reply,
     allowedMentions: { repliedUser: false }
   });
+}
+
+  if (isGuildLeader) {
+  const onlyReact = Math.random() < 0.3;
+  await reactRandom(message, LEADER_REACTIONS);
+
+  if (onlyReact) return;
+
+  const reply = LEADER_GREETINGS[Math.floor(Math.random() * LEADER_GREETINGS.length)];
+  return message.reply({
+    content: reply,
+    allowedMentions: { repliedUser: false }
+  });
+}
+
+const onlyReact = Math.random() < 0.4;
+await reactRandom(message, MEMBER_REACTIONS);
+
+if (onlyReact) return;
+
+const reply = MEMBER_GREETINGS[Math.floor(Math.random() * MEMBER_GREETINGS.length)];
+return message.reply({
+  content: reply,
+  allowedMentions: { repliedUser: false }
+});
 }
 
   try {

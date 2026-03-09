@@ -478,10 +478,19 @@ return message.reply({
   });
 
   const reply =
-    resp.choices?.[0]?.message?.content?.trim() ||
-    "You mentioned me?";
+  resp.choices?.[0]?.message?.content?.trim() ||
+  "You mentioned me?";
 
-    return message.reply({
+const mentionRequest = /(mention me|ping me|tag me|mention me like|can you mention me)/i.test(lower);
+
+if (mentionRequest) {
+  return message.reply({
+    content: `<@${message.author.id}> ${reply}`,
+    allowedMentions: { users: [message.author.id] }
+  });
+}
+
+return message.reply({
   content: reply,
   allowedMentions: { repliedUser: false }
 });

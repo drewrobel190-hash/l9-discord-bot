@@ -289,12 +289,26 @@ client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
   if (!client.user) return;
 
-  // detect if the bot was mentioned
-  const mentioned = message.mentions.users.has(client.user.id);
-  if (!mentioned) return;
-
   // ignore commands
   if (message.content.startsWith("!")) return;
+
+  // detect if the bot was mentioned
+  const mentioned = message.mentions.users.has(client.user.id);
+
+  // detect if user replied to the bot
+  let repliedToBot = false;
+
+  if (message.reference?.messageId) {
+    try {
+      const repliedMessage = await message.channel.messages.fetch(message.reference.messageId);
+      repliedToBot = repliedMessage.author?.id === client.user.id;
+    } catch (err) {
+      console.log("Could not fetch replied message:", err.message);
+    }
+  }
+
+  // stop if not mention and not reply-to-bot
+  if (!mentioned && !repliedToBot) return;
 
   const isOwner = message.author.id === OWNER_ID;
   const isGuildLeader = message.author.id === GUILD_LEADER_ID;
@@ -304,11 +318,26 @@ client.on("messageCreate", async (message) => {
     .replace(new RegExp(`<@!?${client.user.id}>`, "g"), "")
     .trim();
 
-  // if someone only pings the bot
+  // if someone only pings the bot or replies with no text
   if (!text) {
-    if (isOwner) return message.reply("Yes Senpai~?");
-    if (isGuildLeader) return message.reply("Yes leader?");
-    return message.reply("You called me?");
+    if (isOwner) {
+      return message.reply({
+        content: "Yes Senpai~?",
+        allowedMentions: { repliedUser: false }
+      });
+    }
+
+    if (isGuildLeader) {
+      return message.reply({
+        content: "Yes leader?",
+        allowedMentions: { repliedUser: false }
+      });
+    }
+
+    return message.reply({
+      content: "You called me?",
+      allowedMentions: { repliedUser: false }
+    });
   }
 
   try {
@@ -340,8 +369,11 @@ client.on("messageCreate", async (message) => {
     });
 
   } catch (err) {
-    console.error("❌ mention AI error:", err);
-    return message.reply("My brain lagged for a second.");
+    console.error("❌ mention/reply AI error:", err);
+    return message.reply({
+      content: "My brain lagged for a second.",
+      allowedMentions: { repliedUser: false }
+    });
   }
 });
 

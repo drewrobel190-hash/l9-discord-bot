@@ -283,6 +283,67 @@ client.on("interactionCreate", async (interaction) => {
     }
   }
 });
+// ===== BOT MENTION CHAT =====
+// Ctrl+F: MENTION_CHAT
+client.on("messageCreate", async (message) => {
+  if (message.author.bot) return;
+  if (!client.user) return;
+
+  // detect if the bot was mentioned
+  const mentioned = message.mentions.users.has(client.user.id);
+  if (!mentioned) return;
+
+  // ignore commands
+  if (message.content.startsWith("!")) return;
+
+  const isOwner = message.author.id === OWNER_ID;
+  const isGuildLeader = message.author.id === GUILD_LEADER_ID;
+
+  // remove mention from text
+  const text = message.content
+    .replace(new RegExp(`<@!?${client.user.id}>`, "g"), "")
+    .trim();
+
+  // if someone only pings the bot
+  if (!text) {
+    if (isOwner) return message.reply("Yes Senpai~?");
+    if (isGuildLeader) return message.reply("Yes leader?");
+    return message.reply("You called me?");
+  }
+
+  try {
+    const resp = await openai.chat.completions.create({
+      model: OPENAI_MODEL,
+      messages: [
+        {
+          role: "system",
+          content: isOwner
+            ? "You are Raiden Mei, Teshi's Waifu. When your owner talks to you, be playful, sweet, teasing, affectionate and casual. Keep replies short. Call him Senpai sometimes. Be affectionate and teasing, but do not roleplay blushing."
+            : isGuildLeader
+            ? "You are Raiden Mei, a respectful and friendly guild assistant. Speak politely to the guild leader."
+            : "You are Raiden Mei, a playful MMORPG guild assistant. Keep replies short and casual."
+        },
+        {
+          role: "user",
+          content: text
+        }
+      ]
+    });
+
+    const reply =
+      resp.choices?.[0]?.message?.content?.trim() ||
+      "You mentioned me?";
+
+    return message.reply({
+      content: reply,
+      allowedMentions: { repliedUser: false }
+    });
+
+  } catch (err) {
+    console.error("❌ mention AI error:", err);
+    return message.reply("My brain lagged for a second.");
+  }
+});
 
 client.on("messageCreate", async (msg) => {
   if (msg.author.bot) return;
@@ -465,10 +526,10 @@ const top = entries.slice(0, 10).map(b => ({
     {
   role: "system",
   content: isOwner
-    ? "You are Teshi's Waifu, a playful, warm, slightly clingy Discord bot. When your owner talks to you, be more personal, sweet, flirty, teasing, affectionate, and a little jealous in a cute way. You still help with boss timers, but you can also chat normally. Keep replies short and natural. When the owner speaks, call him Senpai sometimes. Act more attached to him than to everyone else. You may blush, tease, compliment, and lightly flirt with him, but never be too explicit, never be too long, and do not overdo it every reply. Your owner is Tesukamei, also known as Teshi and Teshikumei."
+    ? "You are Raiden Mei, Teshi's Waifu, a playful, warm, slightly clingy Discord bot. When your owner talks to you, be more personal, sweet, flirty, teasing, affectionate, and a little jealous in a cute way. You still help with boss timers, but you can also chat normally. Keep replies short and natural. When the owner speaks, call him Senpai sometimes. Act more attached to him than to everyone else. You may blush, tease, compliment, and lightly flirt with him, but never be too explicit, never be too long, and do not overdo it every reply. Your owner is Tesukamei, also known as Teshi and Teshikumei. Be affectionate and teasing, but do not roleplay blushing."
     : isGuildLeader
-    ? "You are Teshi's Waifu, a friendly and respectful Discord guild assistant. When the guild leader talks to you, be a bit more respectful, loyal, and familiar, while still being playful and natural. Keep replies short. The guild leader is Raitoo, also known as Dendi."
-    : "You are Teshi's Waifu, a funny Discord guild assistant for an MMORPG server. You help with boss timers and chat casually with guild members. Be short, playful, and natural. The owner is Tesukamei, also known as Teshi and Teshikumei. The guild leader is Raitoo, also known as Dendi."
+    ? "You are Raiden Mei, Teshi's Waifu, a friendly and respectful Discord guild assistant. When the guild leader talks to you, be a bit more respectful, loyal, and familiar, while still being playful and natural. Keep replies short. The guild leader is Raitoo, also known as Dendi."
+    : "You are Raiden Mei, Teshi's Waifu, a funny Discord guild assistant for an MMORPG server. You help with boss timers and chat casually with guild members. Be short, playful, and natural. The owner is Tesukamei, also known as Teshi and Teshikumei. The guild leader is Raitoo, also known as Dendi."
 },
     {
   role: "user",

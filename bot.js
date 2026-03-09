@@ -32,6 +32,7 @@ const client = new Client({
 
 const CHANNEL_ID = process.env.CHANNEL_ID;
 const OWNER_ID = "709437629199941685";
+const GUILD_LEADER_ID = "675896906022387737";
 const CLIENT_ID = process.env.CLIENT_ID; 
 const GUILD_IDS = (process.env.GUILD_IDS || process.env.GUILD_ID || "")
   .split(",")
@@ -224,7 +225,7 @@ client.on("messageCreate", async (message) => {
 
   // !say hello guys
   if (command === "say") {
-    if (message.author.id !== OWNER_ID) {
+    if (message.author.id !== OWNER_ID && message.author.id !== GUILD_LEADER_ID) {
       return message.reply("nope only my owner can use this command 😎");
     }
 
@@ -250,7 +251,7 @@ client.on("interactionCreate", async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
   if (interaction.commandName === "speak") {
-    if (interaction.user.id !== OWNER_ID) {
+    if (interaction.user.id !== OWNER_ID && interaction.user.id !== GUILD_LEADER_ID) {
       return interaction.reply({
         content: "only my owner can use this 😎",
         flags: MessageFlags.Ephemeral
@@ -404,11 +405,26 @@ if (cmd === "ask") {
   // cheap shortcut (so AI doesn't get called for obvious requests)
   const lower = arg.toLowerCase();
   const isOwner = msg.author.id === OWNER_ID;
+  const isGuildLeader = msg.author.id === GUILD_LEADER_ID; 
   
 const greetings = ["hi","hello","hey","yo","sup","hola","goodmorning","good evening"];
 
 // greeting only if the message is short
 if (greetings.includes(lower) || greetings.includes(lower.replace(" bot",""))) {
+  if (isOwner) {
+    return sendTemp(
+      msg.channel,
+      `👋 Hello Senpai~ missed you. Ask me anything about our **L9 boss timers** or just chat with me.`
+    );
+  }
+
+  if (isGuildLeader) {
+    return sendTemp(
+      msg.channel,
+      `👋 Hello leader. You can ask me about our **L9 boss timers**.`
+    );
+  }
+
   return sendTemp(
     msg.channel,
     `👋 Hello ${msg.author.username}! You can ask me about our **L9 boss timers**.`
@@ -427,11 +443,20 @@ if (greetings.includes(lower) || greetings.includes(lower.replace(" bot",""))) {
     return sendTemp(msg.channel, `📌 **Next bosses:**\n${lines.join("\n")}`);
   }
 
-  // Build small context for AI (keep it short)
-  const top = entries.slice(0, 10).map(b => ({
-    name: b.name,
-    minutes: Math.round((b.spawnMs - now) / 60000),
-  }));
+ // detect if the question is about bosses
+const bossKeywords = [
+  "boss", "bosses", "spawn", "spawns", "timer", "timers",
+  "respawn", "next boss", "boss list", "spawn list", "schedule",
+  "next spawn", "what's next", "whats next"
+];
+
+const isBossQuestion = bossKeywords.some(k => lower.includes(k));
+
+// Build small context for AI
+const top = entries.slice(0, 10).map(b => ({
+  name: b.name,
+  minutes: Math.round((b.spawnMs - now) / 60000),
+}));
 
   try {
    const resp = await openai.chat.completions.create({
@@ -440,13 +465,17 @@ if (greetings.includes(lower) || greetings.includes(lower.replace(" bot",""))) {
     {
   role: "system",
   content: isOwner
-    ? "You are Teshi's Waifu, a playful, warm, slightly clingy Discord bot. When your owner talks to you, be more personal, sweet, playful, and casual. You still help with boss timers, but you can also chat normally. Keep replies short and natural."
-    : "You are Teshi's Waifu, a funny Discord guild assistant for an MMORPG server. You help with boss timers and chat casually with guild members. Be short, playful, and natural."
+    ? "You are Teshi's Waifu, a playful, warm, slightly clingy Discord bot. When your owner talks to you, be more personal, sweet, flirty, teasing, affectionate, and a little jealous in a cute way. You still help with boss timers, but you can also chat normally. Keep replies short and natural. When the owner speaks, call him Senpai sometimes. Act more attached to him than to everyone else. You may blush, tease, compliment, and lightly flirt with him, but never be too explicit, never be too long, and do not overdo it every reply. Your owner is Tesukamei, also known as Teshi and Teshikumei."
+    : isGuildLeader
+    ? "You are Teshi's Waifu, a friendly and respectful Discord guild assistant. When the guild leader talks to you, be a bit more respectful, loyal, and familiar, while still being playful and natural. Keep replies short. The guild leader is Raitoo, also known as Dendi."
+    : "You are Teshi's Waifu, a funny Discord guild assistant for an MMORPG server. You help with boss timers and chat casually with guild members. Be short, playful, and natural. The owner is Tesukamei, also known as Teshi and Teshikumei. The guild leader is Raitoo, also known as Dendi."
 },
     {
-      role: "user",
-      content: `Upcoming bosses (minutes from now): ${JSON.stringify(top)}\n\nUser: ${arg}`
-    }
+  role: "user",
+  content: (isOwner && !isBossQuestion)
+    ? `User: ${arg}`
+    : `Upcoming bosses (minutes from now): ${JSON.stringify(top)}\n\nUser: ${arg}`
+}
   ]
 });
 

@@ -285,6 +285,34 @@ client.on("interactionCreate", async (interaction) => {
 });
 // ===== BOT MENTION CHAT =====
 // Ctrl+F: MENTION_CHAT
+
+// ===== RANDOM GREETINGS =====
+// Ctrl+F: RANDOM_GREETINGS
+
+const OWNER_GREETINGS = [
+  "Yes Senpai~?",
+  "Hmm? You called me, Senpai?",
+  "I'm here, Senpai.",
+  "What is it, Senpai~?",
+  "Did you need me, Senpai?",
+  "I'm listening, Senpai."
+];
+
+const LEADER_GREETINGS = [
+  "Yes leader?",
+  "I'm here, leader.",
+  "What do you need, leader?",
+  "You called?",
+  "How can I help, leader?"
+];
+
+const MEMBER_GREETINGS = [
+  "You called me?",
+  "Hmm?",
+  "Yes?",
+  "Did someone mention me?",
+  "I'm listening."
+];
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
   if (!client.user) return;
@@ -317,56 +345,116 @@ client.on("messageCreate", async (message) => {
   const text = message.content
     .replace(new RegExp(`<@!?${client.user.id}>`, "g"), "")
     .trim();
+  const lower = text.toLowerCase();
+
+  const bossKeywords = [
+  "boss", "bosses", "spawn", "spawns", "timer", "timers",
+  "respawn", "next boss", "boss list", "spawn list", "schedule",
+  "next spawn", "what's next", "whats next"
+];
+
+  const isBossQuestion = bossKeywords.some(k => lower.includes(k));
 
   // if someone only pings the bot or replies with no text
-  if (!text) {
-    if (isOwner) {
-      return message.reply({
-        content: "Yes Senpai~?",
-        allowedMentions: { repliedUser: false }
-      });
-    }
+if (!text) {
 
-    if (isGuildLeader) {
-      return message.reply({
-        content: "Yes leader?",
-        allowedMentions: { repliedUser: false }
-      });
-    }
-
-    return message.reply({
-      content: "You called me?",
-      allowedMentions: { repliedUser: false }
-    });
-  }
-
-  try {
-    const resp = await openai.chat.completions.create({
-      model: OPENAI_MODEL,
-      messages: [
-        {
-          role: "system",
-          content: isOwner
-            ? "You are Raiden Mei, Teshi's Waifu. When your owner talks to you, be playful, sweet, teasing, affectionate and casual. Keep replies short. Call him Senpai sometimes. Be affectionate and teasing, but do not roleplay blushing."
-            : isGuildLeader
-            ? "You are Raiden Mei, a respectful and friendly guild assistant. Speak politely to the guild leader."
-            : "You are Raiden Mei, a playful MMORPG guild assistant. Keep replies short and casual."
-        },
-        {
-          role: "user",
-          content: text
-        }
-      ]
-    });
-
-    const reply =
-      resp.choices?.[0]?.message?.content?.trim() ||
-      "You mentioned me?";
-
+  if (isOwner) {
+    const reply = OWNER_GREETINGS[Math.floor(Math.random() * OWNER_GREETINGS.length)];
     return message.reply({
       content: reply,
       allowedMentions: { repliedUser: false }
     });
+  }
+
+  if (isGuildLeader) {
+    const reply = LEADER_GREETINGS[Math.floor(Math.random() * LEADER_GREETINGS.length)];
+    return message.reply({
+      content: reply,
+      allowedMentions: { repliedUser: false }
+    });
+  }
+
+  const reply = MEMBER_GREETINGS[Math.floor(Math.random() * MEMBER_GREETINGS.length)];
+  return message.reply({
+    content: reply,
+    allowedMentions: { repliedUser: false }
+  });
+}
+
+  try {
+  let top = [];
+
+  if (isBossQuestion && db) {
+    const snap = await db.ref("bossTimers").get();
+    const timers = snap.val() || {};
+
+    const fixedSnap = await db.ref("fixedBossGuilds").get();
+    const fixedGuilds = fixedSnap.val() || {};
+
+    const now = Date.now();
+
+    const intervalEntries = Object.entries(timers)
+      .map(([name, data]) => {
+        const spawnMs = typeof data === "object" ? data.spawn : data;
+        return { name, spawnMs, type: "interval" };
+      })
+      .filter(x => x.spawnMs && x.spawnMs >= now);
+
+    const fixedEntries = FIXED_BOSSES
+      .filter(b => {
+        const entry = fixedGuilds[b.name];
+        if (entry === "Disabled") return false;
+        if (entry && typeof entry === "object" && entry.disabled === true) return false;
+        if (b.disabled) return false;
+        return true;
+      })
+      .map(b => {
+        const nextSpawn = getNextFixedSpawn(b.schedule);
+        return {
+          name: b.name,
+          spawnMs: nextSpawn ? nextSpawn.getTime() : null,
+          type: "fixed"
+        };
+      })
+      .filter(x => x.spawnMs && x.spawnMs >= now);
+
+    const entries = [...intervalEntries, ...fixedEntries]
+      .sort((a, b) => a.spawnMs - b.spawnMs);
+
+    top = entries.slice(0, 10).map(b => ({
+      name: b.name,
+      minutes: Math.round((b.spawnMs - now) / 60000),
+    }));
+  }
+
+  const resp = await openai.chat.completions.create({
+    model: OPENAI_MODEL,
+    messages: [
+      {
+        role: "system",
+        content: isOwner
+          ? "You are Raiden Mei, Teshi's Waifu. When your owner talks to you, be playful, sweet, teasing, affectionate and casual. Keep replies short. Call him Senpai sometimes. Be affectionate and teasing, but do not roleplay blushing."
+          : isGuildLeader
+          ? "You are Raiden Mei, a respectful and friendly guild assistant. Speak politely to the guild leader."
+          : "You are Raiden Mei, a playful MMORPG guild assistant. Keep replies short and casual."
+      },
+      {
+        role: "user",
+        content: isBossQuestion
+          ? `Upcoming bosses (minutes from now): ${JSON.stringify(top)}\n\nUser: ${text}`
+          : text
+      }
+    ]
+  });
+
+  const reply =
+    resp.choices?.[0]?.message?.content?.trim() ||
+    "You mentioned me?";
+
+    return message.reply({
+  content: reply,
+  allowedMentions: { repliedUser: false }
+});
 
   } catch (err) {
     console.error("❌ mention/reply AI error:", err);
